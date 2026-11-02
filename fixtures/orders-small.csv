@@ -1,0 +1,6 @@
+order_id,status,amount_cents
+o-1,paid,1299
+o-2,pending,500
+o-3,paid,701
+o-4,refunded,999
+o-5,paid,0
