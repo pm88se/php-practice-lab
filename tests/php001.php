@@ -34,7 +34,7 @@ try {
 
     try {
         fputcsv($output, ['order_id', 'status', 'amount_cents']);
-        for ($i = 0; $i < 150_000; $i++) {
+        for ($i = 0; $i < 1000_000; $i++) {
             fputcsv($output, ['o-' . $i, $i % 2 === 0 ? 'paid' : 'pending', 199]);
         }
     } finally {
@@ -42,7 +42,7 @@ try {
     }
 
     expectSame(
-        ['paid_count' => 75_000, 'paid_total_cents' => 14_925_000],
+        ['paid_count' => 500_000, 'paid_total_cents' => 99_500_000],
         CsvOrderSummary::summarize($path),
         'PHP-001 large CSV',
     );
