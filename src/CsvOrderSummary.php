@@ -25,13 +25,34 @@ final class CsvOrderSummary
         $data = array_map('str_getcsv', $lines);
         return $data;
     }
+
+    /**
+     * Lazy feed of paid orders; PHP-002: replace stub with streaming implementation.
+     *
+     * @return \Generator<int, array{order_id: string, amount_cents: int}>
+     */
+    public static function paidOrders(string $path): \Generator
+    {
+        yield from [];
+    }
+
+    /**
+     * Return at most $limit paid orders, stopping iteration as soon as enough are found.
+     *
+     * @return list<array{order_id: string, amount_cents: int}>
+     */
+    public static function previewPaid(string $path, int $limit): array
+    {
+        throw new \LogicException('PHP-002 preview not implemented yet');
+    }
+
     /**
      * Read CSV orders and return:
      * ['paid_count' => int, 'paid_total_cents' => int]
      *
      * Expected columns: order_id,status,amount_cents.
      *
-     * TODO (PHP-001): implement using bounded memory.
+     * PHP-002: refactor this method to consume paidOrders() to share parsing.
      *
      * @return array{paid_count: int, paid_total_cents: int}
      */
