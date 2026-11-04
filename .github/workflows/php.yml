@@ -2,6 +2,7 @@ name: PHP CI
 
 on:
   push:
+    branches: ['main']
   pull_request:
 
 jobs:
@@ -18,5 +19,7 @@ jobs:
           coverage: none
       - name: Syntax check
         run: find src bin tests -name '*.php' -print0 | xargs -0 -n1 php -l
-      - name: Test
+      - name: Functional tests
         run: php tests/run.php
+      - name: Memory-constrained tests
+        run: php -d memory_limit=16M tests/run.php
