@@ -17,5 +17,6 @@ expectSame('php-practice-lab', Environment::name(), 'environment name');
 
 require_once __DIR__ . '/php001.php';
 require_once __DIR__ . '/php002.php';
+require_once __DIR__ . '/php003.php';
 
 echo "Tests passed.\n";
