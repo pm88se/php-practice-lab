@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Practice;
 
+use RuntimeException;
 use SplFileObject;
 
 final class CsvOrderSummary
@@ -33,7 +34,22 @@ final class CsvOrderSummary
      */
     public static function paidOrders(string $path): \Generator
     {
-        yield from [];
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw new RuntimeException('Unable to open CSV file');
+        }
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                if ($row[1] === 'paid') {
+                    yield [
+                        'order_id' => $row[0], 
+                        'amount_cents' => $row[2] + 0
+                    ];
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
     }
 
     /**
@@ -43,7 +59,22 @@ final class CsvOrderSummary
      */
     public static function previewPaid(string $path, int $limit): array
     {
-        throw new \LogicException('PHP-002 preview not implemented yet');
+        if ($limit <= 0) {
+            return [];
+        }
+        $result = [];
+        $paidOrdersGenerator = self::paidOrders($path);
+
+        foreach ($paidOrdersGenerator as $paidOrder) {
+            $result[] = $paidOrder;
+
+            if (count($result) >= $limit) {
+                break;
+            }
+        }
+
+        return $result;
+        
     }
 
     /**
@@ -58,14 +89,11 @@ final class CsvOrderSummary
      */
     public static function summarize(string $path): array
     {
-        $file = self::openCsv($path);
-        // $file = self::naiveOpenCsv($path);
+        $paidOrdersGenerator = self::paidOrders($path);
         $result = ['paid_count' => 0, 'paid_total_cents' => 0];
-        foreach ($file as $row) {
-            if ($row[1] === 'paid') {
-                $result['paid_count'] ++;
-                $result['paid_total_cents'] += $row[2];
-            }
+        foreach ($paidOrdersGenerator as $paidOrder) {
+            $result['paid_count'] ++;
+            $result['paid_total_cents'] += $paidOrder['amount_cents'];
         }
         return $result;
     }
