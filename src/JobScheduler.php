@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Practice;
 
+require_once __DIR__ . '/StableFifoPriorityQueue.php';
+
 final class JobScheduler
 {
+    private StableFifoPriorityQueue $priorityQueue;
+    public function __construct()
+    {
+        $this->priorityQueue = new StableFifoPriorityQueue();
+    }
     /**
      * Queue a job. A larger priority number means higher priority.
      *
@@ -13,7 +20,7 @@ final class JobScheduler
      */
     public function add(string $id, string $type, int $priority): void
     {
-        throw new \LogicException('PHP-003 add() not implemented yet');
+        $this->priorityQueue->insert(['id' => $id, 'type' => $type, 'priority' => $priority], $priority);
     }
 
     /**
@@ -23,6 +30,10 @@ final class JobScheduler
      */
     public function next(): ?array
     {
-        throw new \LogicException('PHP-003 next() not implemented yet');
+        if ($this->priorityQueue->isEmpty()) {
+            return null;
+        }
+        $job = $this->priorityQueue->extract();
+        return $job;
     }
 }
