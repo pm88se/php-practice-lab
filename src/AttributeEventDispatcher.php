@@ -4,10 +4,19 @@ declare(strict_types=1);
 
 namespace Practice;
 
+use ReflectionClass;
+
 require_once __DIR__ . '/HandlesEvent.php';
 
 final class AttributeEventDispatcher
 {
+    private array $listeners;
+    private array $scannedClasses;
+    public function __construct()
+    {
+        $this->listeners = [];
+        $this->scannedClasses = [];
+    }
     /**
      * Discover public methods marked #[HandlesEvent(...)] and register them.
      *
@@ -16,7 +25,25 @@ final class AttributeEventDispatcher
      */
     public function register(object $handler): void
     {
-        throw new \LogicException('PHP-005 register() not implemented yet');
+        $reflection = new ReflectionClass($handler);
+
+        $methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
+        $this->scannedClasses[get_class($handler)] = true;
+        
+        $eventsToRegister = [];
+        foreach ($methods as $method) {
+            $attributes = $method->getAttributes(HandlesEvent::class);
+            foreach ($attributes as $attribute) {
+                $instance = $attribute->newInstance();
+                if (isset($this->listeners[$instance->name]) || isset($eventsToRegister[$instance->name])) {
+                    throw new \LogicException('PHP-005 duplicate event registration rejected');
+                }
+                $eventsToRegister[$instance->name] = $method;
+            }            
+        }
+        foreach ($eventsToRegister as $event => $method) {
+            $this->listeners[$event] = ['method' => $method, 'handler' => $handler];
+        }
     }
 
     /**
@@ -25,7 +52,11 @@ final class AttributeEventDispatcher
      */
     public function dispatch(string $event, array $payload): mixed
     {
-        throw new \LogicException('PHP-005 dispatch() not implemented yet');
+        if (!isset($this->listeners[$event])) {
+            throw new \InvalidArgumentException('PHP-005 unknown event');
+        }
+        $dispatcher = $this->listeners[$event];
+        return $dispatcher['method']->invoke($dispatcher['handler'], $payload);
     }
 
     /**
@@ -34,6 +65,6 @@ final class AttributeEventDispatcher
      */
     public function scannedClassCount(): int
     {
-        throw new \LogicException('PHP-005 scannedClassCount() not implemented yet');
+        return count($this->scannedClasses);
     }
 }
