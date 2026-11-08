@@ -9,21 +9,29 @@ namespace Practice;
  */
 final class JobContext
 {
+    private array $state;
+    public function __construct()
+    {
+        $this->state = [];
+    }
     /** Store one value for the currently running job. */
     public function set(string $key, mixed $value): void
     {
-        throw new \LogicException('PHP-006 JobContext::set() not implemented yet');
+        $this->state[$key] = $value;
     }
 
     /** Return stored value, or $default when the key is absent. */
     public function get(string $key, mixed $default = null): mixed
     {
-        throw new \LogicException('PHP-006 JobContext::get() not implemented yet');
+        if (array_key_exists($key, $this->state)) {
+            return $this->state[$key];
+        }
+        return  $default;
     }
 
     /** Remove all state before the next job starts. */
     public function clear(): void
     {
-        throw new \LogicException('PHP-006 JobContext::clear() not implemented yet');
+        $this->state = [];
     }
 }
