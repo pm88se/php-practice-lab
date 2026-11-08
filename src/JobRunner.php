@@ -26,6 +26,17 @@ final class JobRunner
      */
     public function run(array $job, callable $handler): array
     {
-        throw new \LogicException('PHP-006 JobRunner::run() not implemented yet');
+        try {
+            $this->context->clear();
+            foreach ($job as $key => $value) {
+                $this->context->set($key, $value);
+            }
+            $result = $handler($this->context);
+            return ['ok' => true, 'value' => $result, 'error' => null];
+        } catch (\Throwable $error) {
+            return ['ok' => false, 'value' => null, 'error' => $error];
+        } finally {
+            $this->context->clear();
+        }
     }
 }
