@@ -58,7 +58,11 @@ final class ImportCheckpoint
      */
     public function __serialize(): array
     {
-        throw new \LogicException('PHP-007 __serialize() not implemented yet');
+        return [
+            'importId' => $this->importId,
+            'processed' => $this->processed,
+        ];
+
     }
 
     /**
@@ -69,12 +73,13 @@ final class ImportCheckpoint
      */
     public function __unserialize(array $data): void
     {
-        throw new \LogicException('PHP-007 __unserialize() not implemented yet');
+        $this->importId = $data['importId'];
+        $this->processed = $data['processed'];
     }
 
     /** A cloned checkpoint must not share the original stream handle. */
     public function __clone(): void
     {
-        throw new \LogicException('PHP-007 __clone() not implemented yet');
+        $this->stream = null;
     }
 }
