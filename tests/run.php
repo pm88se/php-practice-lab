@@ -22,5 +22,6 @@ require_once __DIR__ . '/php004.php';
 require_once __DIR__ . '/php005.php';
 require_once __DIR__ . '/php006.php';
 require_once __DIR__ . '/php007_serialization.php';
+require_once __DIR__ . '/php008.php';
 
 echo "Tests passed.\n";
