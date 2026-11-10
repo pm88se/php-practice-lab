@@ -24,6 +24,19 @@ final class TenantConfigOverride
      */
     public function apply(array $defaults, array $overrides): array
     {
-        throw new \LogicException('PHP-008 apply() not implemented yet');
+        $result = [];
+        foreach ($defaults as $section => $settings) {
+            foreach ($settings as $name => $value) {
+                $result[$section][$name] = $value;
+            }
+        }
+
+        foreach ($overrides as $section => $settings) {
+            foreach ($settings as $name => $value) {
+                $result[$section][$name] = $value;
+            }
+        }
+
+        return $result;
     }
 }
