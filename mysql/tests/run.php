@@ -22,10 +22,6 @@ function mysqlLabExpectSame(mixed $expected, mixed $actual, string $label): void
 $sessionA = mysqlLabConnection();
 $sessionB = mysqlLabConnection();
 
-$engine = $sessionA->query(
-    "SELECT ENGINE FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts'"
-);
 resetMysqlLab($sessionA);
 $engine = $sessionA->query(
     "SELECT ENGINE FROM information_schema.TABLES
