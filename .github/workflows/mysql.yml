@@ -1,0 +1,42 @@
+name: MySQL Lab CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+
+jobs:
+  mysql-smoke:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: local-root-only
+          MYSQL_DATABASE: practice_lab
+          MYSQL_USER: lab
+          MYSQL_PASSWORD: lab
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ulab -plab --silent"
+          --health-interval=3s
+          --health-timeout=3s
+          --health-retries=20
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: practice_lab
+      MYSQL_USER: lab
+      MYSQL_PASSWORD: lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_mysql
+          coverage: none
+      - name: PHP syntax check
+        run: find mysql -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: MySQL smoke tests
+        run: php mysql/tests/run.php
