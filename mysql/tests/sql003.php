@@ -9,6 +9,8 @@ use Practice\MySQL\Sql003IsolationObserver;
 $observer = new Sql003IsolationObserver();
 $reader = mysqlLabConnection();
 $writer = mysqlLabConnection();
+// Fail fast if the implementation accidentally uses a locking read.
+$writer->exec('SET SESSION innodb_lock_wait_timeout = 2');
 
 try {
     foreach ([
