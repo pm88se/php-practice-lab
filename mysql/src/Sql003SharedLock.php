@@ -21,7 +21,28 @@ final class Sql003SharedLock
      */
     public function beginSharedRead(PDO $pdo, int $productId): ?int
     {
-        throw new \LogicException('SQL-003 beginSharedRead() not implemented');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT available FROM inventory WHERE product_id = :product_id FOR SHARE '
+            );
+
+            $stmt->execute(['product_id' => $productId]);
+            $available = $stmt->fetchColumn();
+            if ($available === false) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                return null;
+            }
+            return $available;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -30,7 +51,10 @@ final class Sql003SharedLock
      */
     public function finishRead(PDO $pdo): void
     {
-        throw new \LogicException('SQL-003 finishRead() not implemented');
+        if (!$pdo->inTransaction()) {
+            throw new \RuntimeException('No transaction to commit');
+        }
+        $pdo->commit();
     }
 
     /**
@@ -42,6 +66,24 @@ final class Sql003SharedLock
      */
     public function changeAvailable(PDO $pdo, int $productId, int $newAvailable): void
     {
-        throw new \LogicException('SQL-003 changeAvailable() not implemented');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'UPDATE inventory
+                SET available = :new_available
+                WHERE product_id = :product_id'
+            );
+            $stmt->execute([
+                'product_id' => $productId, 
+                'new_available' => $newAvailable
+            ]);
+            $pdo->commit();
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 }
