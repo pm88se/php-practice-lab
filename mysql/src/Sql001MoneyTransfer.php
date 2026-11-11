@@ -26,6 +26,53 @@ final class Sql001MoneyTransfer
      */
     public function transfer(PDO $pdo, int $fromId, int $toId, int $amountCents): void
     {
-        throw new \LogicException('SQL-001 transfer() not implemented yet');
+        if ($amountCents <= 0) {
+            throw new \InvalidArgumentException('Invalid amount');
+        }
+        if ($fromId === $toId) {
+            throw new \InvalidArgumentException('Wrong account ids');
+        }
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'UPDATE accounts
+                SET balance_cents = balance_cents - :amount
+                WHERE id = :id AND balance_cents >= :minimum_balance'
+            );
+
+            $stmt->execute([
+                'amount' => $amountCents,
+                'minimum_balance' => $amountCents,
+                'id' => $fromId,
+            ]);
+
+            if ($stmt->rowCount() !== 1) {
+                throw new \RuntimeException('Source account not found');
+            }
+
+            $stmt2 = $pdo->prepare(
+                'UPDATE accounts
+                SET balance_cents = balance_cents + :amount
+                WHERE id = :id'
+            );
+
+            $stmt2->execute([
+                'amount' => $amountCents,
+                'id' => $toId,
+            ]);
+
+            if ($stmt2->rowCount() !== 1) {
+                throw new \RuntimeException('Destination account not found');
+            }
+
+            $pdo->commit();
+
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 }
