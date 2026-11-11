@@ -5,11 +5,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/../bootstrap.php';
 
 /**
- * Reset ONLY the dedicated lab's accounts and inventory fixtures.
+ * Reset ONLY the dedicated lab's accounts, inventory and jobs fixtures.
  * This is destructive; never point the lab credentials at a production DB.
  */
 function resetMysqlLab(PDO $pdo): void
 {
+    $pdo->exec('DROP TABLE IF EXISTS jobs');
     $pdo->exec('DROP TABLE IF EXISTS inventory');
     $pdo->exec('DROP TABLE IF EXISTS accounts');
 
@@ -32,6 +33,18 @@ function resetMysqlLab(PDO $pdo): void
     $pdo->exec(
         "INSERT INTO inventory (product_id, sku, available)
          VALUES (100, 'LAST-UNIT', 1), (200, 'MULTI-UNIT', 3)"
+    );
+
+    $jobsSchema = file_get_contents(__DIR__ . '/../jobs.sql');
+    if ($jobsSchema === false) {
+        throw new RuntimeException('Could not read mysql/jobs.sql');
+    }
+    $pdo->exec($jobsSchema);
+    $pdo->exec(
+        "INSERT INTO jobs (id, payload, status)
+         VALUES (1, 'email-A', 'pending'),
+                (2, 'email-B', 'pending'),
+                (3, 'email-C', 'pending')"
     );
 }
 
