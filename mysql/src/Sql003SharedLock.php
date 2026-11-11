@@ -7,23 +7,41 @@ namespace Practice\MySQL;
 use PDO;
 
 /**
- * SQL-003 — An InnoDB shared locking read.
+ * SQL-003 — Own the full lifecycle of InnoDB shared locks.
  */
 final class Sql003SharedLock
 {
     /**
-     * Read a product's available stock while acquiring a SHARED row lock.
+     * Begin a transaction, lock the product row for SHARED reading,
+     * and return its available stock. Keep the transaction open when
+     * the row exists: the caller will invoke finishRead() later.
      *
-     * IMPORTANT: the caller starts and ends the transaction.
-     * Do not begin, commit or roll back here: the lock must remain held
-     * after this method returns until the caller ends its transaction.
-     *
-     * Use SELECT ... FOR SHARE (or LOCK IN SHARE MODE).
-     * Return null if no matching product exists; otherwise return its
-     * available count as an integer.
+     * Missing product: return null and leave no transaction open.
+     * On an SQL error, roll back and rethrow.
      */
-    public function readAvailable(PDO $pdo, int $productId): ?int
+    public function beginSharedRead(PDO $pdo, int $productId): ?int
     {
-        throw new \LogicException('SQL-003 readAvailable() not implemented yet');
+        throw new \LogicException('SQL-003 beginSharedRead() not implemented');
+    }
+
+    /**
+     * Release the shared lock by finishing the transaction successfully.
+     * Do not modify inventory.
+     */
+    public function finishRead(PDO $pdo): void
+    {
+        throw new \LogicException('SQL-003 finishRead() not implemented');
+    }
+
+    /**
+     * In a separate transaction, change the product's available stock.
+     * Use an UPDATE and commit on success; roll back on SQL failure.
+     * Do not catch and hide MySQL lock wait errors (1205).
+     *
+     * This is the competing writer, not a shared read.
+     */
+    public function changeAvailable(PDO $pdo, int $productId, int $newAvailable): void
+    {
+        throw new \LogicException('SQL-003 changeAvailable() not implemented');
     }
 }
