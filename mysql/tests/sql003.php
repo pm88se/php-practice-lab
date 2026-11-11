@@ -2,99 +2,107 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/Sql003PaymentWebhook.php';
+require_once __DIR__ . '/../src/Sql003SharedLock.php';
 
-use Practice\MySQL\Sql003PaymentWebhook;
+use Practice\MySQL\Sql003SharedLock;
 
-function sql003Balance(PDO $pdo, int $accountId): int
+$lock = new Sql003SharedLock();
+$a = mysqlLabConnection();
+$b = mysqlLabConnection();
+$c = mysqlLabConnection();
+
+function sql003EndTransaction(PDO $pdo): void
 {
-    $stmt = $pdo->prepare('SELECT balance_cents FROM accounts WHERE id = ?');
-    $stmt->execute([$accountId]);
-    return (int) $stmt->fetchColumn();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
 }
 
-function sql003EventCount(PDO $pdo, string $eventId): int
-{
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM payment_events WHERE event_id = ?');
-    $stmt->execute([$eventId]);
-    return (int) $stmt->fetchColumn();
-}
-
-function sql003ExpectException(callable $action, string $expected, string $label): void
+function sql003ExpectLockTimeout(callable $action, string $label): void
 {
     try {
         $action();
-    } catch (Throwable $exception) {
-        if (!$exception instanceof $expected) {
-            throw new RuntimeException("{$label}: expected {$expected}, got " . $exception::class, previous: $exception);
+    } catch (PDOException $exception) {
+        if ((int) ($exception->errorInfo[1] ?? 0) === 1205) {
+            return;
         }
-        return;
+        throw new RuntimeException("{$label}: expected MySQL lock timeout (1205), got {$exception->getMessage()}", previous: $exception);
     }
-    throw new RuntimeException("{$label}: expected {$expected}, no exception thrown");
+    throw new RuntimeException("{$label}: query did not wait for the incompatible lock");
 }
 
-$webhook = new Sql003PaymentWebhook();
-$sessionA = mysqlLabConnection();
-$sessionB = mysqlLabConnection();
-
 try {
-    resetMysqlLab($sessionA);
+    resetMysqlLab($a);
+    $b->exec('SET SESSION innodb_lock_wait_timeout = 1');
+    $c->exec('SET SESSION innodb_lock_wait_timeout = 1');
 
+    // Shared + shared: two separate transactions may read and retain
+    // compatible shared locks on the same product simultaneously.
+    $a->beginTransaction();
+    $b->beginTransaction();
+    try {
+        mysqlLabExpectSame(1, $lock->readAvailable($a, 100), 'SQL-003: A acquires shared lock');
+        mysqlLabExpectSame(1, $lock->readAvailable($b, 100), 'SQL-003: B acquires compatible shared lock');
+
+        // An ordinary SELECT still sees the committed version via MVCC.
+        mysqlLabExpectSame(
+            1,
+            (int) $c->query('SELECT available FROM inventory WHERE product_id = 100')->fetchColumn(),
+            'SQL-003: ordinary consistent SELECT is not blocked',
+        );
+
+        sql003ExpectLockTimeout(
+            static fn () => $c->exec('UPDATE inventory SET available = available - 1 WHERE product_id = 100'),
+            'SQL-003: UPDATE waits for shared locks',
+        );
+    } finally {
+        sql003EndTransaction($b);
+        sql003EndTransaction($a);
+    }
+
+    // With the shared locks released, UPDATE is now allowed.
     mysqlLabExpectSame(
-        true,
-        $webhook->apply($sessionA, 'payment-001', 1, 2500),
-        'SQL-003: first delivery applied',
+        1,
+        $c->exec('UPDATE inventory SET available = available - 1 WHERE product_id = 100'),
+        'SQL-003: UPDATE succeeds after shared locks released',
     );
-    mysqlLabExpectSame(12500, sql003Balance($sessionB, 1), 'SQL-003: first credit committed');
-    mysqlLabExpectSame(1, sql003EventCount($sessionB, 'payment-001'), 'SQL-003: first event recorded');
-
-    // Provider retry: same event ID, even with inconsistent retry payload.
     mysqlLabExpectSame(
-        false,
-        $webhook->apply($sessionB, 'payment-001', 1, 9000),
-        'SQL-003: duplicate delivery ignored',
+        0,
+        (int) $a->query('SELECT available FROM inventory WHERE product_id = 100')->fetchColumn(),
+        'SQL-003: update became visible',
     );
-    mysqlLabExpectSame(12500, sql003Balance($sessionA, 1), 'SQL-003: duplicate did not credit twice');
-    mysqlLabExpectSame(1, sql003EventCount($sessionA, 'payment-001'), 'SQL-003: duplicate has one event row');
 
-    // A distinct event is a legitimate additional payment.
-    mysqlLabExpectSame(true, $webhook->apply($sessionB, 'payment-002', 1, 500), 'SQL-003: new event applied');
-    mysqlLabExpectSame(13000, sql003Balance($sessionA, 1), 'SQL-003: new event credited');
+    resetMysqlLab($a);
 
-    // Event and balance must commit together; nonexistent account cannot consume event ID.
-    sql003ExpectException(
-        static fn () => $webhook->apply($sessionA, 'payment-failed', 9999, 200),
-        RuntimeException::class,
-        'SQL-003: missing account rejected',
-    );
-    mysqlLabExpectSame(0, sql003EventCount($sessionB, 'payment-failed'), 'SQL-003: failed event rolled back');
-    mysqlLabExpectSame(13000, sql003Balance($sessionB, 1), 'SQL-003: failed event leaves balance alone');
+    // Exclusive + shared: a FOR UPDATE lock conflicts with our shared read.
+    $a->beginTransaction();
+    try {
+        $a->query('SELECT available FROM inventory WHERE product_id = 100 FOR UPDATE')->fetchColumn();
+        $b->beginTransaction();
+        try {
+            sql003ExpectLockTimeout(
+                static fn () => $lock->readAvailable($b, 100),
+                'SQL-003: shared read waits for exclusive lock',
+            );
+        } finally {
+            sql003EndTransaction($b);
+        }
+    } finally {
+        sql003EndTransaction($a);
+    }
 
-    // Once the failed event has been rolled back, its ID may be used for a valid account.
-    mysqlLabExpectSame(true, $webhook->apply($sessionB, 'payment-failed', 2, 200), 'SQL-003: failed ID can be retried');
-    mysqlLabExpectSame(5200, sql003Balance($sessionA, 2), 'SQL-003: retried event credited');
+    // Missing product must be distinguishable from stock=0.
+    $a->beginTransaction();
+    try {
+        mysqlLabExpectSame(null, $lock->readAvailable($a, 9999), 'SQL-003: missing product returns null');
+    } finally {
+        sql003EndTransaction($a);
+    }
 
-    sql003ExpectException(
-        static fn () => $webhook->apply($sessionA, '', 1, 100),
-        InvalidArgumentException::class,
-        'SQL-003: empty event ID rejected',
-    );
-    sql003ExpectException(
-        static fn () => $webhook->apply($sessionA, 'payment-zero', 1, 0),
-        InvalidArgumentException::class,
-        'SQL-003: zero amount rejected',
-    );
-    mysqlLabExpectSame(0, sql003EventCount($sessionB, 'payment-zero'), 'SQL-003: invalid event not inserted');
-    mysqlLabExpectSame(false, $sessionA->inTransaction(), 'SQL-003: connection A left clean');
-    mysqlLabExpectSame(false, $sessionB->inTransaction(), 'SQL-003: connection B left clean');
-
-    echo "SQL-003 payment webhook tests passed.\n";
+    echo "SQL-003 shared-lock tests passed.\n";
 } finally {
-    if ($sessionA->inTransaction()) {
-        $sessionA->rollBack();
-    }
-    if ($sessionB->inTransaction()) {
-        $sessionB->rollBack();
-    }
-    resetMysqlLab($sessionA);
+    sql003EndTransaction($c);
+    sql003EndTransaction($b);
+    sql003EndTransaction($a);
+    resetMysqlLab($a);
 }
