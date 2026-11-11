@@ -73,3 +73,6 @@ require_once __DIR__ . '/sql001.php';
 
 // SQL-002 starts red until reserve() is implemented.
 require_once __DIR__ . '/sql002.php';
+
+// SQL-003 begins red until observe() is implemented.
+require_once __DIR__ . '/sql003.php';
