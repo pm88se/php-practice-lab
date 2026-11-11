@@ -26,6 +26,36 @@ final class Sql002InventoryReservation
      */
     public function reserve(PDO $pdo, int $productId): bool
     {
-        throw new \LogicException('SQL-002 reserve() not implemented yet');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT available FROM inventory WHERE product_id = :product_id FOR UPDATE '
+            );
+
+            $stmt->execute(['product_id' => $productId]);
+
+            $available = $stmt->fetchColumn();
+            if ($available === false || (int) $available < 1) {
+                $pdo->rollBack();
+                return false;
+            }
+            $stmt2 = $pdo->prepare(
+                'UPDATE inventory
+                SET available = available - 1
+                WHERE product_id = :product_id'
+            );
+            $stmt2->execute(['product_id' => $productId]);
+            if ($stmt2->rowCount() !== 1) {
+                throw new \RuntimeException('Failed during reservation');
+            } 
+            $pdo->commit();
+            return true;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 }
