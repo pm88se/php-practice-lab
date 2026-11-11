@@ -70,3 +70,6 @@ echo "MySQL lab smoke tests passed.\n";
 
 // SQL-001 is intentionally red until the transfer implementation is written.
 require_once __DIR__ . '/sql001.php';
+
+// SQL-002 starts red until reserve() is implemented.
+require_once __DIR__ . '/sql002.php';
