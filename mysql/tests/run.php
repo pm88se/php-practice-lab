@@ -74,5 +74,5 @@ require_once __DIR__ . '/sql001.php';
 // SQL-002 starts red until reserve() is implemented.
 require_once __DIR__ . '/sql002.php';
 
-// SQL-003 begins red until payment webhook apply() is implemented.
+// SQL-003 begins red until shared-lock readAvailable() is implemented.
 require_once __DIR__ . '/sql003.php';
