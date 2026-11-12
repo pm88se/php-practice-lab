@@ -1,0 +1,9 @@
+-- PERF-001 — YOUR WORK
+-- Commit the SQL you actually experiment with here:
+-- 1. Your proposed CREATE INDEX / DROP INDEX statements.
+-- 2. Any rewritten SELECT statements (if justified).
+-- 3. EXPLAIN ANALYZE statements to verify your hypothesis.
+-- 4. Optional ANALYZE TABLE if statistics are relevant.
+--
+-- Do not change baseline.sql. Avoid dumping raw seed data or generated files.
+-- Keep the final candidate and its rollback SQL legible.
