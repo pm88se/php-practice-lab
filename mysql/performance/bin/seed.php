@@ -79,5 +79,5 @@ for ($offset = 0; $offset < $count; $offset += $batchSize) {
     }
 }
 
-$pdo->exec('ANALYZE TABLE perf_orders');
+$pdo->query('ANALYZE TABLE perf_orders')->fetchAll();
 printf("Done: %s profile (%d rows), %.1f seconds.\n", $profile, $count, microtime(true) - $start);
