@@ -32,7 +32,29 @@ final class Sql004JobLocks
      */
     public function holdJob(PDO $pdo, int $jobId): bool
     {
-        throw new \LogicException('SQL-004 holdJob() not implemented');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT * FROM jobs WHERE id = :job_id AND `status` = "pending" FOR UPDATE'
+            );
+
+            $stmt->execute(['job_id' => $jobId]);
+            $job = $stmt->fetchColumn();
+
+            if ($job === false) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                return false;
+            }
+            return true;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -41,7 +63,9 @@ final class Sql004JobLocks
      */
     public function releaseJob(PDO $pdo): void
     {
-        throw new \LogicException('SQL-004 releaseJob() not implemented');
+        if ($pdo->inTransaction()) {
+            $pdo->commit();
+        }
     }
 
     /**
@@ -56,7 +80,41 @@ final class Sql004JobLocks
      */
     public function claimNowait(PDO $pdo, int $jobId): bool
     {
-        throw new \LogicException('SQL-004 claimNowait() not implemented');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT * FROM jobs WHERE id = :job_id AND `status` = "pending" FOR UPDATE NOWAIT'
+            );
+
+            $stmt->execute(['job_id' => $jobId]);
+            $job = $stmt->fetchColumn();
+
+            if ($job === false) {
+                $pdo->rollBack();
+
+                return false;
+            }
+
+            $stmt2 = $pdo->prepare(
+                'UPDATE jobs
+                SET `status` = "processing"
+                WHERE id = :job_id AND `status` = "pending"'
+            );
+            $stmt2->execute(['job_id' => $jobId]);
+            if ($stmt2->rowCount() !== 1) {
+                $pdo->rollBack();
+                throw new \RuntimeException('Failed during job status updating');
+            } 
+            $pdo->commit();
+
+            return true;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -69,6 +127,40 @@ final class Sql004JobLocks
      */
     public function claimNext(PDO $pdo): ?int
     {
-        throw new \LogicException('SQL-004 claimNext() not implemented');
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT id FROM jobs WHERE `status` = \'pending\' ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED'
+            );
+
+            $stmt->execute();
+            $jobId = $stmt->fetchColumn();
+
+            if ($jobId === false) {
+                $pdo->rollBack();
+
+                return null;
+            }
+
+            $stmt2 = $pdo->prepare(
+                'UPDATE jobs
+                SET `status` = \'processing\'
+                WHERE id = :job_id AND `status` = \'pending\''
+            );
+            $stmt2->execute(['job_id' => $jobId]);
+            if ($stmt2->rowCount() !== 1) {
+                $pdo->rollBack();
+                throw new \RuntimeException('Failed during job status updating');
+            } 
+            $pdo->commit();
+
+            return $jobId;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 }
