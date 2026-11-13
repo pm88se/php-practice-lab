@@ -7,3 +7,5 @@
 --
 -- Do not change baseline.sql. Avoid dumping raw seed data or generated files.
 -- Keep the final candidate and its rollback SQL legible.
+CREATE INDEX index_tenant_status_created 
+ON perf_orders (tenant_id, `status`, created_at)
