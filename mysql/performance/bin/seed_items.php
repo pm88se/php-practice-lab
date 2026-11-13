@@ -24,7 +24,6 @@ if ($orders === 0) {
 }
 
 $pdo->exec('TRUNCATE TABLE perf_order_items');
-$batchSize = 300; // 100 orders x 3 items
 $start = microtime(true);
 
 for ($startId = 1; $startId <= $orders; $startId += 100) {
