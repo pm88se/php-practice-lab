@@ -10,3 +10,10 @@
 --
 -- Important: PERF-001's index may already exist on perf_orders depending
 -- on what you merged and ran locally. Inspect SHOW INDEX as needed.
+
+ALTER TABLE perf_order_items
+ADD CONSTRAINT FK_PersonOrder
+FOREIGN KEY (order_id) REFERENCES perf_orders(id);
+
+CREATE INDEX index_tenant_status_created
+ON perf_orders (tenant_id, `status`, created_at)
