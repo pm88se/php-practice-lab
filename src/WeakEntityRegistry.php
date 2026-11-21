@@ -32,13 +32,25 @@ final class WeakEntityRegistry
      */
     public function resolve(string $id, callable $factory): object
     {
-        throw new \LogicException('PHP-009 not implemented');
+        if (isset($this->entries[$id])) {
+            $object = $this->entries[$id]->get();
+
+            if ($object !== null) {
+                return $object;
+            }
+        }
+
+        $object = $factory($id);
+
+        $this->entries[$id] = \WeakReference::create($object);
+
+        return $object;
     }
 
     /** True only if the object currently registered under $id is alive. */
     public function hasLive(string $id): bool
     {
-        throw new \LogicException('PHP-009 not implemented');
+        return isset($this->entries[$id]) && !!$this->entries[$id]->get();
     }
 
     /**
@@ -48,7 +60,14 @@ final class WeakEntityRegistry
      */
     public function sweep(): int
     {
-        throw new \LogicException('PHP-009 not implemented');
+        $count = 0;
+        foreach ($this->entries as $id => $weakRef) {
+            if ($weakRef->get() === null) {
+                unset($this->entries[$id]);
+                $count ++;
+            }
+        }
+        return $count;
     }
 
     /** Number of key slots, including entries whose referents have expired. */
