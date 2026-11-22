@@ -35,8 +35,14 @@ final class NestedPaidEventStream
      */
     public static function stream(array $paths, callable $onOpen, callable $onClose): \Generator
     {
-        throw new \LogicException('PHP-010 stream not implemented');
-        yield; // Keep method recognized as a generator until implemented.
+        $total = 0;
+        foreach ($paths as $path) {
+            $generator = self::paidFromFile($path, $onOpen, $onClose);
+            $count = yield from $generator;
+
+            $total += $count;
+        }
+        return $total;
     }
 
     /**
@@ -52,7 +58,30 @@ final class NestedPaidEventStream
      */
     private static function paidFromFile(string $path, callable $onOpen, callable $onClose): \Generator
     {
-        throw new \LogicException('PHP-010 paidFromFile not implemented');
-        yield;
+        $successfullyCompleted = 0;
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw new \RuntimeException('Unable to open file');
+        }
+        try {
+            $onOpen($path);
+            while (($line = fgets($handle)) !== false) {
+                $event = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
+
+                if ($event['type'] === 'order.paid') {
+                    $successfullyCompleted++;
+                    yield [
+                        'file' => basename($path),
+                        'order_id' => $event['order_id'],
+                        'amount_cents' => $event['amount_cents'],
+                    ];
+                    
+                }
+            }
+            return $successfullyCompleted;
+        } finally {
+            fclose($handle);
+            $onClose($path);
+        }
     }
 }
