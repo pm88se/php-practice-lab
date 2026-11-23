@@ -29,11 +29,94 @@ final class MultiSourceEventProcessor
      * @param callable(string): void $onClose
      * @return \Generator<int, array{source: string, event_id: string, delta_cents: int}, mixed, void, int>
      */
-    public static function stream(array $paths, callable $onOpen, callable $onClose): \Generator
-    {
-        throw new \LogicException('PHP-011 stream not implemented');
-        yield;
+    public static function stream(
+    array $paths,
+    callable $onOpen,
+    callable $onClose
+): \Generator {
+    $generators = [];
+
+    foreach ($paths as $source => $path) {
+        $generators[$source] = self::readSource(
+            $source,
+            $path,
+            $onOpen,
+            $onClose
+        );
     }
+
+    $activeSource = 'payments';
+    $paused = [];
+    $completed = [];
+    $needsAdvance = [];
+    $total = 0;
+
+    while (true) {
+        $generator = $generators[$activeSource];
+
+        // Повернулися до генератора, подія якого вже оброблена.
+        if ($needsAdvance[$activeSource] ?? false) {
+            $generator->next();
+            $needsAdvance[$activeSource] = false;
+        }
+
+        // Джерело завершилося.
+        if (!$generator->valid()) {
+            $completed[$activeSource] = true;
+
+            if (empty($paused)) {
+                break;
+            }
+
+            $activeSource = array_pop($paused);
+            continue;
+        }
+
+        $event = $generator->current();
+
+        // Цю подію вже взято в обробку.
+        $needsAdvance[$activeSource] = true;
+
+        if (isset($event['switch_to'])) {
+            $target = $event['switch_to'];
+
+            if (!array_key_exists($target, $generators)) {
+                throw new \InvalidArgumentException(
+                    "Unknown source: {$target}"
+                );
+            }
+
+            // Немає сенсу перемикатися на себе
+            // або на вже завершене джерело.
+            if (
+                $target === $activeSource
+                || isset($completed[$target])
+            ) {
+                continue;
+            }
+
+            // Якщо target уже призупинений,
+            // прибираємо старий запис зі стека.
+            $paused = array_values(array_filter(
+                $paused,
+                static fn(string $source): bool =>
+                    $source !== $target
+            ));
+
+            $paused[] = $activeSource;
+            $activeSource = $target;
+
+            continue;
+        }
+
+        // Лише бізнес-події впливають на баланс
+        // і передаються зовнішньому consumer.
+        $total += $event['delta_cents'];
+        yield $event;
+    }
+
+    return $total;
+}
 
     /**
      * Source-level JSONL reader: only source-specific business events and
@@ -60,7 +143,57 @@ final class MultiSourceEventProcessor
         callable $onOpen,
         callable $onClose
     ): \Generator {
-        throw new \LogicException('PHP-011 readSource not implemented');
-        yield;
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw new \RuntimeException('Unable to open file');
+        }
+        try {
+            $onOpen($path);
+            while (($line = fgets($handle)) !== false) {
+                $event = json_decode($line, true, 512, JSON_THROW_ON_ERROR);
+
+                if ($event['type'] === 'source.switch') {
+                    yield ['switch_to' => $event['target']];
+                    continue;
+                }
+
+                switch ($source) {
+                    case 'payments':
+                        if ($event['type'] === 'payment.settled') {
+                            yield [
+                                'source' => $source,
+                                'event_id' => $event['event_id'],
+                                'delta_cents' => $event['amount_cents'],
+                            ];
+                        }
+                        break;
+
+                    case 'refunds':
+                        if ($event['type'] === 'refund.completed') {
+                            yield [
+                                'source' => $source,
+                                'event_id' => $event['event_id'],
+                                'delta_cents' => -$event['amount_cents'],
+                            ];
+                        }
+                        break;
+
+                    case 'adjustments':
+                        if ($event['type'] === 'ledger.adjusted') {
+                            yield [
+                                'source' => $source,
+                                'event_id' => $event['event_id'],
+                                'delta_cents' => $event['delta_cents'],
+                            ];
+                        }
+                        break;
+                }
+            }
+
+        } finally {
+            fclose($handle);
+            $onClose($path);
+        }
+
     }
 }
