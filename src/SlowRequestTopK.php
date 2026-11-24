@@ -1,59 +1,96 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Practice;
 
-/**
- * PHP-012 — Keep only the K slowest requests from a very large stream.
- *
- * Implement with a CUSTOM \SplHeap comparator. The heap must contain at
- * most $capacity entries at any point. Do not store the entire input or
- * sort every incoming request.
- */
-final class SlowRequestTopK
+final class RequestMinHeap extends \SplHeap
 {
-    /**
-     * @param int $capacity Strictly positive number of retained requests.
-     */
-    public function __construct(private readonly int $capacity)
+    protected function compare(mixed $a, mixed $b): int
     {
-        throw new \LogicException('PHP-012 constructor not implemented');
+        if ($a['duration_ms'] === $b['duration_ms']) {
+            return $a['sequence'] <=> $b['sequence'];
+        }
+
+        return $b['duration_ms'] <=> $a['duration_ms'];
     }
 
-    /**
-     * Register one completed request.
-     *
-     * Better candidates: longer duration; ties prefer EARLIER arrival.
-     * The first request accepted has arrival sequence 0.
-     */
-    public function add(string $id, string $route, int $durationMs): void
+    public function isBetterThanWorst(array $candidate): bool
     {
-        throw new \LogicException('PHP-012 add not implemented');
-    }
-
-    /** Number of retained entries, never greater than capacity. */
-    public function count(): int
-    {
-        throw new \LogicException('PHP-012 count not implemented');
-    }
-
-    /**
-     * Drain retained requests ordered from SLOWEST to FASTEST.
-     * Equal-duration requests are ordered by original arrival (earliest first).
-     * Calling drain() a second time returns [].
-     *
-     * @return list<array{id: string, route: string, duration_ms: int}>
-     */
-    public function drain(): array
-    {
-        throw new \LogicException('PHP-012 drain not implemented');
+        return $this->compare($candidate, $this->top()) < 0;
     }
 }
 
-/**
- * Define a dedicated \SplHeap subclass with protected compare(mixed,mixed).
- *
- * Hint: SplHeap places its HIGHEST-RANKED element at top().
- * For bounded top-K, consider which element must be ejected first.
- */
+final class SlowRequestTopK
+{
+    private RequestMinHeap $heap;
+    private int $sequence = 0;
+
+    public function __construct(
+        private readonly int $capacity
+    ) {
+        if ($capacity <= 0) {
+            throw new \InvalidArgumentException(
+                'Capacity must be greater than zero'
+            );
+        }
+
+        $this->heap = new RequestMinHeap();
+    }
+
+    public function add(
+        string $id,
+        string $route,
+        int $durationMs
+    ): void {
+        $data = [
+            'id' => $id,
+            'route' => $route,
+            'duration_ms' => $durationMs,
+            'sequence' => $this->sequence++,
+        ];
+
+        if ($this->heap->count() < $this->capacity) {
+            $this->heap->insert($data);
+            return;
+        }
+
+        if ($this->heap->isBetterThanWorst($data)) {
+            $this->heap->extract();
+            $this->heap->insert($data);
+        }
+    }
+
+    public function count(): int
+    {
+        return $this->heap->count();
+    }
+
+    public function drain(): array
+    {
+        $result = [];
+
+        while (!$this->heap->isEmpty()) {
+            $result[] = $this->heap->extract();
+        }
+
+        usort($result, static function (array $a, array $b): int {
+            $durationComparison =
+                $b['duration_ms'] <=> $a['duration_ms'];
+
+            if ($durationComparison !== 0) {
+                return $durationComparison;
+            }
+
+            return $a['sequence'] <=> $b['sequence'];
+        });
+
+        return array_map(
+            static fn(array $item): array => [
+                'id' => $item['id'],
+                'route' => $item['route'],
+                'duration_ms' => $item['duration_ms'],
+            ],
+            $result
+        );
+    }
+}
